@@ -1,0 +1,5 @@
+numpy
+matplotlib
+gymnasium
+chess
+stable-baselines3
