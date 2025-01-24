@@ -40,6 +40,9 @@ class ChessEnv(gym.Env):
         # Track whose turn it is:  True for White, False for Black
         self.current_player = True
 
+        # Tracks total number of illegal moves per episode
+        self.illegal_moves_count = 0
+
         self.done = False # Determines if the enviornment has been terminated
 
     
@@ -141,17 +144,60 @@ class ChessEnv(gym.Env):
         return observation
 
 
-    # Defines reward system for the learning model
-    def compute_reward(self):
-        pass
 
     # Decodes action sample into a chess move
     def decode_action(self, action):
         return self.action_to_move[action]
+    
 
+
+    # Defines reward system for the learning model
+    def compute_reward(self):
+        
+        # if either players king is in checkmate
+        if self.board.is_checkmate(): 
+            # If the agent is not in checkmate, it will 
+            # receive a positive reward for winning the game
+            if self.board.turn != self.current_player:
+                return 1.0
+            else: # if the agent loses the game
+                return -1.0
+            
+        # If the game ends in a draw
+        elif self.board.is_stalemate() or self.board.is_insufficient_material():
+            return 0.5
+
+        return 0.0 # If the action step did not result in a win, loss, or draw
 
     def step(self, action):
-        return super().step(action)
+        
+        # if the agent picks an illegal move in a given postion
+        illegal_move_penalty = -0.1 
+        legal_move_made = False # exit condition for while loop
+
+        while not legal_move_made:
+            # Converts int action into a chess move object
+            move = self.action_to_move[action] 
+
+            # Checks if move is legal
+            if move in self.board.legal_moves:
+                self.board.push(move) # applies move to the board object
+                self.current_player = not self.current_player # Changes player turn
+                legal_move_made = True # breaks while loop
+            else:
+                done = False # indicates that the game is not over
+                info = {"reason": "illegal move"}
+                self.illegal_moves_count+=1 # Tracks total number of illegal moves per episode
+
+                return self.get_observation(), illegal_move_penalty, done, False, info
+        
+        reward = self.compute_reward() # Compute reward for the legal move
+
+        done = self.board.is_game_over() # Check if the game is over
+
+        observation = self.get_observation() # Get the updated observation
+        
+        return observation, reward, done, False, {}
 
 
 
