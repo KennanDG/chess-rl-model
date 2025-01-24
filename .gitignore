@@ -5,3 +5,4 @@ venv/
 *.pyd
 *.DS_Store
 *.log
+test.py

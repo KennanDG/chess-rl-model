@@ -1,0 +1,10 @@
+setup.py
+src/ChessRL.egg-info/PKG-INFO
+src/ChessRL.egg-info/SOURCES.txt
+src/ChessRL.egg-info/dependency_links.txt
+src/ChessRL.egg-info/requires.txt
+src/ChessRL.egg-info/top_level.txt
+src/agents/__init__.py
+src/agents/ppo_agent.py
+src/environment/__init__.py
+src/environment/chess_env.py
