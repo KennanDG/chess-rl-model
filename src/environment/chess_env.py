@@ -416,7 +416,32 @@ class ChessEnv(gym.Env):
 
 
 
+    # Render the sequence of moves made so far in the game.
+    def render_move_history(self):
+        
+        move_history = list(self.board.move_stack)
+
+        print("Move History:")
+
+        for i, move in enumerate(move_history):
+            print(f"{i+1}. {move}")
+
+
+
+    # Display all legal moves from the current position
+    def render_legal_moves(self):
+
+        legal_moves = list(self.board.legal_moves)
+        print("Legal Moves:")
+        print([move.uci() for move in legal_moves])
+
+
     # Defines rendering for human visualization
     def render(self, mode='human'):
         # Render the board for the user
         print(self.board.unicode(invert_color=True))
+
+        # Render additional information
+        print("\n=== Additional Info ===")
+        self.render_move_history()
+        self.render_legal_moves()
