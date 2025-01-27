@@ -186,33 +186,135 @@ class ChessEnv(gym.Env):
             return 0.5  # Positive reward for putting the opponent in check
         return 0
 
+    # Calculates the current material balance advantage/disadvantage the agent has
+    def calculate_material_balance(self, board):
+
+        piece_values = {'p': 1, 'n': 3, 'b': 3, 'r': 5, 'q': 9, 'k': 0}
+
+        agent_color = self.current_player # determines if the piece belongs to the agent
+
+        agent_balance = 0 # agents piece material
+        opponent_balance = 0 # opponent's material
+
+        material_balance = 0 # Tracks material balance for the agent
+
+        piece_map = board.piece_map() # Gathers all pieces on the board
+
+        for square, piece in piece_map.items():
+
+            # If piece belongs to the agent
+            if piece.color == agent_color:  
+                agent_balance += piece_values.get(piece.symbol().lower(), 0)
+            # otherwise it is the opponents
+            else:
+                opponent_balance += piece_values.get(piece.symbol().lower(), 0)
+
+        
+        max_material = 39  # Sum of all pieces excluding kings
+
+        material_balance = agent_balance - opponent_balance # returns the agent's material balance
+        material_balance = material_balance / max_material # normalize balance
+
+        return material_balance
+    
+
+
+    # Gives reward for pieces in the central squares
+    def calculate_central_control(self, board):
+
+        # total number of pieces in the central control area
+        central_control = 0
+
+        # Extended Central squares
+        central_squares = [
+
+            chess.C3, 
+            chess.C4, 
+            chess.C5, 
+            chess.C6,
+
+            chess.D3, 
+            chess.D4, 
+            chess.D5, 
+            chess.D6,
+
+            chess.E3,
+            chess.E4, 
+            chess.E5,
+            chess.E6,
+
+            chess.F3,
+            chess.F4, 
+            chess.F5,
+            chess.F6,
+        ]
+
+        for square in central_squares:
+
+            # reward for every agent piece in the central control area
+            if board.piece_at(square) and board.piece_at(square) == self.current_player:
+                central_control+=0.1
+        
+        return central_control
+
+
+    
+
+
+    # Gives total reword for positioning and material balance
+    def reward_for_position(self, previous_board):
+
+        # Total material balance from previous turn
+        previous_material = self.calculate_material_balance(previous_board)
+
+        # total material balance result from current turn
+        current_material = self.calculate_material_balance(self.board)
+
+        # Positive reward if material balance improves, negative otherwise
+        material_balance = current_material - previous_material
+
+        # total number of agent pieces in the central control area
+        previous_central_control = self.calculate_central_control(previous_board)
+        current_central_control = self.calculate_central_control(self.board)
+
+        # Positive reward if central control balance improves, negative otherwise
+        positional_reward = current_central_control - previous_central_control
+
+        total_reward = material_balance + positional_reward
+
+
+        return total_reward
+
+
+
 
 
     # Defines reward system for the learning model
     def compute_reward(self, move, previous_board):
 
-        reward = 0 # total reward value returned
+        total_reward = 0 # total reward value returned
         
+        # Calculate each reward parameter
         capture_reward = self.reward_for_capture(move)
-
         check_reward = self.reward_for_check()
+        position_reward = self.reward_for_position(previous_board)
 
         # if either players king is in checkmate
         if self.board.is_checkmate(): 
             # If the agent is not in checkmate, it will 
             # receive a positive reward for winning the game
             if self.board.turn != self.current_player:
-                reward+=1
+                total_reward+=1
             else: # if the agent loses the game
-                reward+=-1
+                total_reward+=-1
             
         # If the game ends in a draw
         elif self.board.is_stalemate() or self.board.is_insufficient_material():
-            reward+=0.5
+            total_reward+=0.5
 
-        reward = reward + capture_reward + check_reward
+        total_reward = total_reward + capture_reward + check_reward + position_reward
 
-        return reward
+        return total_reward
 
 
 
@@ -246,6 +348,22 @@ class ChessEnv(gym.Env):
             return observation, reward, done, False, info
         
 
+        # Ensures longer games allow slightly more mistakes, while shorter games are stricter.
+        threshold = max(5, self.board.fullmove_number // 2)
+
+        if self.illegal_moves_count > threshold:
+            observation = self.get_observation()
+            reward = -1  # Penalize for too many illegal moves
+            done = True
+            info = {
+                "reason": "too many illegal moves",
+                "illegal_moves": self.illegal_moves_count,
+                "total_moves_made": self.board.fullmove_number,
+                "in_check": self.board.is_check()
+            }
+
+            return observation, reward, done, False, info
+
 
         while not legal_move_made:
 
@@ -263,12 +381,14 @@ class ChessEnv(gym.Env):
                     "total_moves_made": self.board.fullmove_number,
                     "in_check": self.board.is_check()
                 }
+                
                 self.illegal_moves_count+=1 # Tracks total number of illegal moves per episode
+                
 
                 return observation, illegal_move_penalty, done, False, info
                 
         
-        reward = self.compute_reward(move, previous_board) # Compute reward for the legal move
+        reward = self.compute_reward(move, previous_board) # Compute total reward for the step
 
         done = self.board.is_game_over() # Check if the game is over
 
