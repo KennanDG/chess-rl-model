@@ -47,7 +47,6 @@ class ChessEnv(gym.Env):
 
     
 
-
     # Maps chess pieces to upper & lower bound elements in observation space 
     def map_pieces(self):
         pieces = {
@@ -156,17 +155,19 @@ class ChessEnv(gym.Env):
 
     # Decodes action sample into a chess move
     def decode_action(self, action):
+        if action not in self.action_to_move:
+            raise ValueError(f"Invalid action index: {action}")
         return self.action_to_move[action]
     
 
     
     # Computes reward for piece capture
-    def reward_for_capture(self, move):
+    def reward_for_capture(self, move, previous_board):
 
         # checks if chess move resulted in a capture
         if self.board.is_capture(move):
 
-            captured_piece = self.board.piece_at(move.to_square)
+            captured_piece = previous_board.piece_at(move.to_square)
 
             # Assign rewards based on the piece value
             piece_values = {'p': 0.1, 'n': 0.3, 'b': 0.3, 'r': 0.5, 'q': 0.9, 'k': 0}  # King capture not possible
@@ -185,6 +186,8 @@ class ChessEnv(gym.Env):
         if self.board.is_check():
             return 0.5  # Positive reward for putting the opponent in check
         return 0
+
+
 
     # Calculates the current material balance advantage/disadvantage the agent has
     def calculate_material_balance(self, board):
@@ -250,37 +253,90 @@ class ChessEnv(gym.Env):
         ]
 
         for square in central_squares:
-
+            piece = board.piece_at(square)
             # reward for every agent piece in the central control area
-            if board.piece_at(square) and board.piece_at(square) == self.current_player:
+            if piece and piece.color == self.current_player:
                 central_control+=0.1
         
         return central_control
 
 
     
+    def calculate_king_safety(self, board):
+
+        # The square int (0-63) that the agent's king piece is on
+        agent_king_square = board.king(self.current_player)
+
+        king_safety_score = 0 # Return value
+
+        is_pawn_in_file = False
+
+        if agent_king_square is not None:
+
+            king_file = chess.square_file(agent_king_square) 
+
+            # Is true if there is any pawn piece in the same file (column) as the king
+            for square, piece in board.piece_map().items():
+
+                current_file = chess.square_file(square)             
+
+                if current_file == king_file:
+                    # if the piece in the same file is a pawn & belongs to the agent
+                    if piece.piece_type == chess.PAWN and piece.color == self.current_player:
+                        is_pawn_in_file = True
+            
+            # penalty for king being exposed
+            if is_pawn_in_file == False:
+                king_safety_score-= 0.5
+
+
+            king_rank = chess.square_rank(agent_king_square)
+
+            # Check the file (column) to the left, same file, and right in 
+            # the rank (row) directly above the king
+            for offset in [-1, 0, 1]: 
+                
+                square = None  
+
+                if self.current_player: # if the agent is currently White
+                    square = chess.square(king_file + offset, king_rank + 1)
+
+                else: # if the agent is currently Black
+                    square = chess.square(king_file + offset, king_rank - 1)
+                
+                # Stores the piece at the current square
+                # returns None if there is no piece present
+                piece = board.piece_at(square)
+
+                # checks if the current piece is a pawn
+                if piece and piece.piece_type == chess.PAWN:
+                    king_safety_score += 0.2
+
+
+        return king_safety_score
+
+
 
 
     # Gives total reword for positioning and material balance
     def reward_for_position(self, previous_board):
 
-        # Total material balance from previous turn
+        # Material balance before & after step
         previous_material = self.calculate_material_balance(previous_board)
-
-        # total material balance result from current turn
         current_material = self.calculate_material_balance(self.board)
-
-        # Positive reward if material balance improves, negative otherwise
         material_balance = current_material - previous_material
 
         # total number of agent pieces in the central control area
         previous_central_control = self.calculate_central_control(previous_board)
         current_central_control = self.calculate_central_control(self.board)
-
-        # Positive reward if central control balance improves, negative otherwise
         positional_reward = current_central_control - previous_central_control
 
-        total_reward = material_balance + positional_reward
+        # King safety
+        previous_king_safety = self.calculate_king_safety(previous_board)
+        current_king_safety = self.calculate_king_safety(self.board)
+        king_safety_reward = current_king_safety - previous_king_safety
+
+        total_reward = material_balance + positional_reward + king_safety_reward
 
 
         return total_reward
@@ -295,7 +351,7 @@ class ChessEnv(gym.Env):
         total_reward = 0 # total reward value returned
         
         # Calculate each reward parameter
-        capture_reward = self.reward_for_capture(move)
+        capture_reward = self.reward_for_capture(move, previous_board)
         check_reward = self.reward_for_check()
         position_reward = self.reward_for_position(previous_board)
 
@@ -324,9 +380,12 @@ class ChessEnv(gym.Env):
         
         # if the agent picks an illegal move in a given postion
         illegal_move_penalty = -0.1 
-        # capture_piece_reward = 0.1 # intermediate reward for capturing a piece
+
         legal_move_made = False # exit condition for while loop
 
+        if action not in self.action_to_move:
+            raise ValueError(f"Invalid action index: {action}")
+    
          # Converts int action into a chess move object
         move = self.action_to_move[action] 
         previous_board = self.board.copy()  # Save the board state before the move
@@ -361,6 +420,8 @@ class ChessEnv(gym.Env):
                 "total_moves_made": self.board.fullmove_number,
                 "in_check": self.board.is_check()
             }
+
+            print(f"Threshold for illegal moves: {threshold}")
 
             return observation, reward, done, False, info
 
@@ -442,6 +503,8 @@ class ChessEnv(gym.Env):
         print(self.board.unicode(invert_color=True))
 
         # Render additional information
-        print("\n=== Additional Info ===")
+        print("\n=== Additional Info ===\n")
         self.render_move_history()
+        print("\n")
         self.render_legal_moves()
+        print("\n")
