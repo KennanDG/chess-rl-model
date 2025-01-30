@@ -14,7 +14,7 @@ class ChessEnv(gym.Env):
         # Will be used to shape the observation space
         self.board = chess.Board()
 
-        # Stores a list of all possible moves (4096) legal or illegal 
+        # Stores a list of all possible moves (4160) legal or illegal 
         self.all_possible_moves = self.generate_all_moves()
 
         # Box space used for the observation space
@@ -25,8 +25,8 @@ class ChessEnv(gym.Env):
             dtype=np.int8 # Discrete values in space
         )
 
-        # discrete range to cover almost all possible moves in chess
-        self.action_space = gym.spaces.Discrete(4672)
+        # discrete range to cover all possible moves in chess
+        self.action_space = gym.spaces.Discrete(4160)
 
         # Maps chess pieces to upper & lower bound elements in observation space
         self.pieces = self.map_pieces()
@@ -81,7 +81,56 @@ class ChessEnv(gym.Env):
                 # Converts integer squares into a chess move
                 move = chess.Move(from_square, to_square)
                 moves.append(move) # adds move to the list
+
+
+        # Generate all possible pawn promotion moves
+        promotion_pieces = ['q', 'r', 'b', 'n']  # Queen, Rook, Bishop, Knight
+
+        # White Pawn promotions
+        for file in 'abcdefgh':
+            
+            from_square = chess.parse_square(file + '7')
+            to_square = chess.parse_square(file + '8')
+
+            # Iterates through each promotion piece and adds
+            # promotion move to the moves list
+            for promotion in promotion_pieces:
+                if promotion == 'q':
+                    move = chess.Move(from_square, to_square, promotion=chess.QUEEN)
+                    moves.append(move)
+                elif promotion == 'r':
+                    move = chess.Move(from_square, to_square, promotion=chess.ROOK)
+                    moves.append(move)
+                elif promotion == 'b':
+                    move = chess.Move(from_square, to_square, promotion=chess.BISHOP)
+                    moves.append(move)
+                else:
+                    move = chess.Move(from_square, to_square, promotion=chess.KNIGHT)
+                    moves.append(move)
         
+        # Black Pawn promotions
+        for file in 'abcdefgh':
+            
+            from_square = chess.parse_square(file + '1')
+            to_square = chess.parse_square(file + '2')
+
+            # Iterates through each promotion piece and adds
+            # promotion move to the moves list
+            for promotion in promotion_pieces:
+                if promotion == 'q':
+                    move = chess.Move(from_square, to_square, promotion=chess.QUEEN)
+                    moves.append(move)
+                elif promotion == 'r':
+                    move = chess.Move(from_square, to_square, promotion=chess.ROOK)
+                    moves.append(move)
+                elif promotion == 'b':
+                    move = chess.Move(from_square, to_square, promotion=chess.BISHOP)
+                    moves.append(move)
+                else:
+                    move = chess.Move(from_square, to_square, promotion=chess.KNIGHT)
+                    moves.append(move)
+
+
         return moves
     
     # Maps the chess move object to an integer
@@ -342,7 +391,18 @@ class ChessEnv(gym.Env):
         return total_reward
 
 
+    # Reward for Pawn promotion
+    def reward_for_promotion(self, move):
 
+        promotion = move.promotion # returns an int for the piece type or None
+
+        if promotion: # If the chess move resulted in a promotion
+            if promotion == 5: # if the agent promoted the pawn to queen
+                return 0.7
+            else: # agent promotes pawn to another piece type
+                return 0.5
+        # returns no reward if there was no promotion
+        return 0.0 
 
 
     # Defines reward system for the learning model
@@ -354,6 +414,7 @@ class ChessEnv(gym.Env):
         capture_reward = self.reward_for_capture(move, previous_board)
         check_reward = self.reward_for_check()
         position_reward = self.reward_for_position(previous_board)
+        promotion_reward = self.reward_for_promotion(move)
 
         # if either players king is in checkmate
         if self.board.is_checkmate(): 
@@ -368,7 +429,7 @@ class ChessEnv(gym.Env):
         elif self.board.is_stalemate() or self.board.is_insufficient_material():
             total_reward+=0.5
 
-        total_reward = total_reward + capture_reward + check_reward + position_reward
+        total_reward = total_reward + capture_reward + check_reward + position_reward + promotion_reward
 
         return total_reward
 

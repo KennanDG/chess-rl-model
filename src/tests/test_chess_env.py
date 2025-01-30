@@ -31,7 +31,7 @@ class TestChessEnv(unittest.TestCase):
 
     def test_generate_all_moves(self):
         all_moves = self.env.generate_all_moves()
-        self.assertEqual(len(all_moves), 4096, "All possible moves list should contain 4096 moves.")
+        self.assertEqual(len(all_moves), 4160, "All possible moves list should contain 4160 moves.")
         self.assertTrue(all(isinstance(move, chess.Move) for move in all_moves), "All moves should be chess.Move objects.")
 
 
@@ -42,12 +42,12 @@ class TestChessEnv(unittest.TestCase):
 
     def test_get_move_to_action(self):
         move_to_action = self.env.get_move_to_action()
-        self.assertEqual(len(move_to_action), 4096, "Move to action mapping should have 4096 entries.")
+        self.assertEqual(len(move_to_action), 4160, "Move to action mapping should have 4160 entries.")
         self.assertIsInstance(move_to_action[self.env.all_possible_moves[0]], int, "Move to action values should be integers.")
 
     def test_get_action_to_move(self):
         action_to_move = self.env.get_action_to_move()
-        self.assertEqual(len(action_to_move), 4096, "Action to move mapping should have 4096 entries.")
+        self.assertEqual(len(action_to_move), 4160, "Action to move mapping should have 4160 entries.")
         self.assertIsInstance(action_to_move[0], chess.Move, "Action to move values should be chess.Move objects.")
 
 
@@ -154,6 +154,28 @@ class TestChessEnv(unittest.TestCase):
         self.env.board.set_fen("8/8/8/8/4K3/8/8/8 w - - 0 1") 
         safety = self.env.calculate_king_safety(self.env.board)
         self.assertEqual(safety, -0.5, "King safety should penalize exposed kings.")
+
+
+
+    ##########################################################
+    ###### reward_for_promotion unit testing #################
+    ##########################################################
+    def test_reward_for_promotion(self):
+        
+        # Set up a position where White's pawn is on the 7th rank, ready to promote
+        self.env.board.set_fen("8/P7/8/8/8/8/8/k6K w - - 0 1")
+        promotion_move = chess.Move.from_uci("a7a8q")  # Pawn moves to a8 and promotes to Queen
+        self.env.board.push(promotion_move)
+        reward = self.env.reward_for_promotion(promotion_move)
+        self.assertEqual(reward, 0.7, "Pawn promotion to queen should give a reward of 0.7")
+
+
+        # Set up a position where White's pawn is on the 7th rank, ready to promote
+        self.env.board.set_fen("8/P7/8/8/8/8/8/k6K w - - 0 1")
+        promotion_move = chess.Move.from_uci("a7a8k")  # Pawn moves to a8 and promotes to Knight
+        self.env.board.push(promotion_move)
+        reward = self.env.reward_for_promotion(promotion_move)
+        self.assertEqual(reward, 0.5, "Pawn promotion to queen should give a reward of 0.7")
 
 
 
